@@ -5,7 +5,7 @@
 // ============================================================
 
 // ============================================================
-// TASK 1: FORM VALIDATION (15%)
+// FORM VALIDATION
 // ============================================================
 function initFormValidation() {
   const form = document.getElementById('register-form');
@@ -44,8 +44,9 @@ function initFormValidation() {
   };
 
   const validatePhone = (phone) => {
-    const re = /^[\d\s\+\-\(\)]+$/;
-    return re.test(phone) && phone.replace(/\D/g, '').length >= 10;
+    // accept +7 (XXX) XXX-XX-XX exactly
+    const re = /^\+?7\s?\(\d{3}\)\s?\d{3}-\d{2}-\d{2}$/;
+    return re.test(phone);
   };
 
   const validatePassword = (password) => {
@@ -151,7 +152,7 @@ function initFormValidation() {
 }
 
 // ============================================================
-// TASK 2: ACCORDION FOR FAQs (15%)
+// ACCORDION FOR FAQs (15%)
 // ============================================================
 function initAccordion() {
   const accordionHTML = `
@@ -300,6 +301,7 @@ function initAccordion() {
 
     // Add click handlers
     document.querySelectorAll('.accordion-header').forEach(header => {
+        header.setAttribute('aria-expanded', 'false');
       header.addEventListener('click', () => {
         const accordionItem = header.parentElement;
         const isActive = accordionItem.classList.contains('active');
@@ -308,18 +310,21 @@ function initAccordion() {
         document.querySelectorAll('.accordion-item').forEach(item => {
           if (item !== accordionItem) {
             item.classList.remove('active');
+              const btn = item.querySelector('.accordion-header');
+              if (btn) btn.setAttribute('aria-expanded', 'false');
           }
         });
 
         // Toggle current item
         accordionItem.classList.toggle('active', !isActive);
+          header.setAttribute('aria-expanded', String(!isActive));
       });
     });
   }
 }
 
 // ============================================================
-// TASK 3: POPUP SUBSCRIPTION FORM (10%)
+// POPUP SUBSCRIPTION FORM (10%)
 // ============================================================
 function initPopupForm() {
   // Create popup HTML
@@ -477,15 +482,17 @@ function initPopupForm() {
   const popup = document.getElementById('subscription-popup');
   const closeBtn = popup.querySelector('.popup-close');
   const form = document.getElementById('subscription-form');
+  const content = popup.querySelector('.popup-content');
 
   // Create "Subscribe" button in footer or main section
   const addSubscribeButton = () => {
-    const footers = document.querySelectorAll('.footer, footer, .container');
-    const targetFooter = Array.from(footers).find(f => 
-      f.textContent.includes('2025') || f.textContent.includes('Eagles')
-    );
+    const footers = document.querySelectorAll('.footer, footer');
+    const containers = document.querySelectorAll('.container');
+    const targetFooter = Array.from(footers).find(f => f);
 
-    if (targetFooter && !document.getElementById('open-subscription-popup')) {
+    const insertInto = targetFooter || containers[containers.length - 1] || document.body;
+
+    if (insertInto && !document.getElementById('open-subscription-popup')) {
       const btn = document.createElement('button');
       btn.id = 'open-subscription-popup';
       btn.textContent = '📧 Subscribe to Newsletter';
@@ -505,7 +512,7 @@ function initPopupForm() {
       btn.onmouseover = () => btn.style.transform = 'translateY(-2px)';
       btn.onmouseout = () => btn.style.transform = 'translateY(0)';
 
-      targetFooter.insertBefore(btn, targetFooter.firstChild);
+      insertInto.insertBefore(btn, insertInto.firstChild);
 
       btn.addEventListener('click', () => {
         popup.style.display = 'flex';
@@ -544,20 +551,53 @@ function initPopupForm() {
     const email = document.getElementById('sub-email').value;
     const newsletter = document.getElementById('sub-newsletter').checked;
 
+    // Basic email validation
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(email)) {
+      showInlineMessage('Please enter a valid email address.', 'error');
+      return;
+    }
+
     const subscriber = { name, email, newsletter, subscribedAt: new Date().toISOString() };
     
     let subscribers = JSON.parse(localStorage.getItem('subscribers') || '[]');
+    const alreadyExists = subscribers.some(s => (s.email || '').toLowerCase() === email.toLowerCase());
+    if (alreadyExists) {
+      showInlineMessage('This email is already subscribed.', 'error');
+      return;
+    }
+
     subscribers.push(subscriber);
     localStorage.setItem('subscribers', JSON.stringify(subscribers));
 
-    alert(`✓ Thank you for subscribing, ${name}!\nWe'll send updates to ${email}`);
+    showInlineMessage(`✓ Thank you for subscribing, ${name}! We'll send updates to ${email}`, 'success');
     form.reset();
-    closePopup();
+    setTimeout(() => {
+      closePopup();
+    }, 900);
   });
+
+  function showInlineMessage(message, type) {
+    const existing = content.querySelector('.popup-message');
+    if (existing) existing.remove();
+    const msg = document.createElement('div');
+    msg.className = 'popup-message';
+    msg.style.cssText = `
+      margin-top: 15px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-weight: 600;
+      text-align: center;
+      ${type === 'success' ? 'background: #2ecc71; color: #fff;' : 'background: #e74c3c; color: #fff;'}
+    `;
+    msg.textContent = message;
+    content.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+  }
 }
 
 // ============================================================
-// TASK 4: CHANGE BACKGROUND COLOR (5%)
+// CHANGE BACKGROUND COLOR (5%)
 // ============================================================
 function initBackgroundChanger() {
   const colors = [
@@ -566,6 +606,37 @@ function initBackgroundChanger() {
   ];
 
   let currentIndex = 0;
+
+  const setThemeVarsForBg = (hex) => {
+    // compute relative luminance to pick contrasting text color
+    const toRGB = (h) => h.replace('#','').match(/.{1,2}/g).map(x => parseInt(x,16));
+    const [r,g,b] = toRGB(hex);
+    const srgb = [r,g,b].map(v => v/255);
+    const lin = srgb.map(v => v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4));
+    const L = 0.2126*lin[0] + 0.7152*lin[1] + 0.0722*lin[2];
+    const text = L > 0.6 ? '#3D3E40' : '#eaeaea';
+    // derive a subtle card/background-1 color by blending with text
+    const blend = (c1, c2, t) => {
+      const a = toRGB(c1), b2 = toRGB(c2);
+      const m = a.map((v,i) => Math.round(v*(1-t) + b2[i]*t));
+      return `#${m.map(v => v.toString(16).padStart(2,'0')).join('')}`;
+    };
+    const bg1 = blend(hex, text, 0.1);
+
+    const root = document.documentElement.style;
+    root.setProperty('--bg-color', hex);
+    root.setProperty('--text-color', text);
+    root.setProperty('--bg1-color', bg1);
+  };
+
+  const isDarkTheme = () => document.documentElement.classList.contains('dark-theme');
+  const clearCustomBg = () => {
+    const root = document.documentElement.style;
+    root.removeProperty('--bg-color');
+    root.removeProperty('--text-color');
+    root.removeProperty('--bg1-color');
+    document.body.style.backgroundColor = '';
+  };
 
   // Create button if not exists
   if (!document.getElementById('bg-color-btn')) {
@@ -601,10 +672,17 @@ function initBackgroundChanger() {
     document.body.appendChild(btn);
 
     btn.addEventListener('click', () => {
+      if (isDarkTheme()) {
+        // Respect dark theme solid background
+        clearCustomBg();
+        btn.innerHTML = 'Dark theme controls background';
+        setTimeout(() => { btn.innerHTML = '🎨 Change Background'; }, 1200);
+        return;
+      }
       currentIndex = (currentIndex + 1) % colors.length;
       const newColor = colors[currentIndex];
       
-      document.documentElement.style.setProperty('--bg-color', newColor);
+      setThemeVarsForBg(newColor);
       document.body.style.backgroundColor = newColor;
       
       // Save preference
@@ -621,13 +699,31 @@ function initBackgroundChanger() {
   // Load saved color
   const savedColor = localStorage.getItem('customBgColor');
   if (savedColor) {
-    document.documentElement.style.setProperty('--bg-color', savedColor);
-    document.body.style.backgroundColor = savedColor;
+    if (!isDarkTheme()) {
+      setThemeVarsForBg(savedColor);
+      document.body.style.backgroundColor = savedColor;
+    } else {
+      clearCustomBg();
+    }
   }
+
+  // React to theme changes
+  window.addEventListener('themechange', (e) => {
+    const theme = (e && e.detail && e.detail.theme) || (isDarkTheme() ? 'dark' : 'light');
+    if (theme === 'dark') {
+      clearCustomBg();
+    } else if (theme === 'light') {
+      const color = localStorage.getItem('customBgColor');
+      if (color) {
+        setThemeVarsForBg(color);
+        document.body.style.backgroundColor = color;
+      }
+    }
+  });
 }
 
 // ============================================================
-// TASK 5: DISPLAY CURRENT DATE AND TIME (5%)
+// DISPLAY CURRENT DATE AND TIME (5%)
 // ============================================================
 function initDateTimeDisplay() {
   const dateTimeHTML = `
@@ -727,12 +823,18 @@ document.addEventListener('DOMContentLoaded', () => {
 // Smooth scroll for anchor links
 document.addEventListener('click', (e) => {
   const anchor = e.target.closest('a[href^="#"]');
-  if (anchor) {
-    e.preventDefault();
-    const target = document.querySelector(anchor.getAttribute('href'));
+  if (!anchor) return;
+  const href = anchor.getAttribute('href') || '';
+  // Ignore empty or just '#'
+  if (href.length <= 1) return;
+  try {
+    const target = document.querySelector(href);
     if (target) {
+      e.preventDefault();
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  } catch (_) {
+    // Invalid selector like '#!'
   }
 });
 
